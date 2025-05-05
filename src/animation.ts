@@ -35,6 +35,7 @@ export abstract class PlayerAnimation {
 	protected abstract animate(player: PlayerObject, delta: number): void;
 
 	private progress0: Map<number, number> = new Map();
+	private currentId: number = 0;
 	private animationObjects: Map<number, (player: PlayerObject, progress: number, currentId: number) => void> =
 		new Map();
 	/**
@@ -74,7 +75,7 @@ export abstract class PlayerAnimation {
 	 * ```
 	 */
 	addAnimation(fn: (player: PlayerObject, progress: number, currentId: number) => void): number {
-		const id = Date.now();
+		const id = this.currentId++;
 		this.progress0.set(id, this.progress);
 		this.animationObjects.set(id, fn);
 		return id;
