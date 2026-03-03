@@ -514,13 +514,13 @@ export class ArmorsObject extends Group {
 	readonly leftLegArmor2: Mesh;
 	readonly rightLegArmor: Mesh;
 	readonly rightLegArmor2: Mesh;
-	private armorHelmeMaterial: MeshStandardMaterial;
+	private armorHelmetMaterial: MeshStandardMaterial;
 	private armorChestplateMaterial: MeshStandardMaterial;
 	private armorLeggingsMaterial: MeshStandardMaterial;
 	private armorBootsMaterial: MeshStandardMaterial;
 	constructor() {
 		super();
-		this.armorHelmeMaterial = new MeshStandardMaterial({
+		this.armorHelmetMaterial = new MeshStandardMaterial({
 			side: DoubleSide,
 			transparent: true,
 			alphaTest: 1e-5,
@@ -542,7 +542,7 @@ export class ArmorsObject extends Group {
 		});
 		const headArmorBox = new BoxGeometry(10, 10, 10);
 		setSkinUVs(headArmorBox, 0, 0, 8, 8, 8);
-		this.headArmor = new Mesh(headArmorBox, this.armorHelmeMaterial);
+		this.headArmor = new Mesh(headArmorBox, this.armorHelmetMaterial);
 		this.headArmor.name = "headArmor";
 		this.headArmor.position.y = 4;
 
@@ -610,8 +610,8 @@ export class ArmorsObject extends Group {
 		);
 	}
 	public setArmorMaps(map1: Texture | null, map2: Texture | null, map3: Texture | null, map4: Texture | null): void {
-		this.armorHelmeMaterial.map = map1;
-		this.armorHelmeMaterial.needsUpdate = true;
+		this.armorHelmetMaterial.map = map1;
+		this.armorHelmetMaterial.needsUpdate = true;
 		this.armorChestplateMaterial.map = map2;
 		this.armorChestplateMaterial.needsUpdate = true;
 		this.armorLeggingsMaterial.map = map3;
@@ -621,7 +621,7 @@ export class ArmorsObject extends Group {
 	}
 	get maps(): (Texture | null)[] {
 		return [
-			this.armorHelmeMaterial.map,
+			this.armorHelmetMaterial.map,
 			this.armorChestplateMaterial.map,
 			this.armorLeggingsMaterial.map,
 			this.armorBootsMaterial.map,
