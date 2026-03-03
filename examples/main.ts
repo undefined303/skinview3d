@@ -84,8 +84,8 @@ function reloadCape(): void {
 }
 
 function reloadArmors(): void {
-	const input1 = document.getElementById("helme_url") as HTMLInputElement;
-	const url1 = obtainTextureUrl("helme_url");
+	const input1 = document.getElementById("helmet_url") as HTMLInputElement;
+	const url1 = obtainTextureUrl("helmet_url");
 	const input2 = document.getElementById("chestplate_url") as HTMLInputElement;
 	const url2 = obtainTextureUrl("chestplate_url");
 	const input3 = document.getElementById("leggings_url") as HTMLInputElement;
@@ -427,7 +427,7 @@ function initializeControls(): void {
 
 	initializeUploadButton("skin_url", reloadSkin);
 	initializeUploadButton("cape_url", reloadCape);
-	initializeUploadButton("helme_url", reloadArmors);
+	initializeUploadButton("helmet_url", reloadArmors);
 	initializeUploadButton("chestplate_url", reloadArmors);
 	initializeUploadButton("leggings_url", reloadArmors);
 	initializeUploadButton("boots_url", reloadArmors);
@@ -437,7 +437,7 @@ function initializeControls(): void {
 	const skinUrl = document.getElementById("skin_url") as HTMLInputElement;
 	const skinModel = document.getElementById("skin_model") as HTMLSelectElement;
 	const capeUrl = document.getElementById("cape_url") as HTMLInputElement;
-	const helmeUrl = document.getElementById("helme_url") as HTMLInputElement;
+	const helmetUrl = document.getElementById("helmet_url") as HTMLInputElement;
 	const chestplateUrl = document.getElementById("chestplate_url") as HTMLInputElement;
 	const leggingsUrl = document.getElementById("leggings_url") as HTMLInputElement;
 	const bootsUrl = document.getElementById("boots_url") as HTMLInputElement;
@@ -448,7 +448,7 @@ function initializeControls(): void {
 	skinUrl?.addEventListener("change", reloadSkin);
 	skinModel?.addEventListener("change", reloadSkin);
 	capeUrl?.addEventListener("change", reloadCape);
-	helmeUrl?.addEventListener("change", reloadArmors);
+	helmetUrl?.addEventListener("change", reloadArmors);
 	chestplateUrl?.addEventListener("change", reloadArmors);
 	leggingsUrl?.addEventListener("change", reloadArmors);
 	bootsUrl?.addEventListener("change", reloadArmors);
