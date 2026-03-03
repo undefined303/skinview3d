@@ -32,6 +32,7 @@ import {
 	Clock,
 	Object3D,
 	ColorManagement,
+	MeshStandardMaterial,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -73,6 +74,17 @@ export interface SkinLoadOptions extends LoadOptions {
 	 * @defaultValue `false`
 	 */
 	ears?: boolean | "load-only";
+
+	/**
+	 * The armor textures to load along with the skin.
+	 *
+	 * This option behaves exactly the same as the `armors` option in {@link SkinViewerOptions}.
+	 * You can specify a single armor material, `null` (to hide all armor), or an array of armor materials.
+	 * The array length must be 1, 2, or 4, with the same semantics as described in {@link SkinViewerOptions}.
+	 *
+	 * If unspecified, the armor will not be changed (i.e., remains as previously set).
+	 */
+	armors?: RemoteImage | TextureSource | null | Array<RemoteImage | TextureSource | null>;
 }
 
 export interface CapeLoadOptions extends LoadOptions {
@@ -169,6 +181,26 @@ export interface SkinViewerOptions {
 				textureType: "standalone" | "skin";
 				source: RemoteImage | TextureSource;
 		  };
+	/**
+	 * The armor textures of the player.
+	 *
+	 * You can specify a single armor material or an array of armor materials.
+	 * An armor material can be a `RemoteImage`, a `TextureSource`, or `null` (to hide that piece).
+	 *
+	 * When a single material is provided, its type (`"main"` for helmet, chestplate, boots; or `"legs"` for leggings)
+	 * will be automatically detected and applied to the corresponding armor pieces.
+	 *
+	 * When an array is provided, its length must be 1, 2, or 4:
+	 *   - **Length 1**: Treated the same as providing a single material (auto‑detect type).
+	 *   - **Length 2**: Automatically detects the two materials' types (expected one `"main"` and one `"legs"`) and applies them.
+	 *   - **Length 4**: Materials are applied in order: `[helmet, chestplate, leggings, boots]`.
+	 *     Any element can be `null` to leave that slot empty.
+	 *
+	 * If the option is omitted, set to `null`, or an empty array, no armor will be visible.
+	 *
+	 * @defaultValue `undefined` (no armor)
+	 */
+	armors?: RemoteImage | TextureSource | null | Array<RemoteImage | TextureSource | null>;
 
 	/**
 	 * Whether to preserve the buffers until manually cleared or overwritten.
@@ -290,9 +322,20 @@ export class SkinViewer {
 	readonly fxaaPass: ShaderPass;
 
 	readonly skinCanvas: HTMLCanvasElement;
+
+	readonly armorHelmetCanvas: HTMLCanvasElement;
+	readonly armorChestplateCanvas: HTMLCanvasElement;
+	readonly armorLeggingsCanvas: HTMLCanvasElement;
+	readonly armorBootsCanvas: HTMLCanvasElement;
+	private contexts: (CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D)[] = [];
+
 	readonly capeCanvas: HTMLCanvasElement;
 	readonly earsCanvas: HTMLCanvasElement;
 	private skinTexture: Texture | null = null;
+	private armorHelmetTexture: Texture | null = null;
+	private armorChestplateTexture: Texture | null = null;
+	private armorLeggingsTexture: Texture | null = null;
+	private armorBootsTexture: Texture | null = null;
 	private capeTexture: Texture | null = null;
 	private earsTexture: Texture | null = null;
 	private backgroundTexture: Texture | null = null;
@@ -335,6 +378,10 @@ export class SkinViewer {
 		this.canvas = options.canvas === undefined ? document.createElement("canvas") : options.canvas;
 
 		this.skinCanvas = document.createElement("canvas");
+		this.armorHelmetCanvas = document.createElement("canvas");
+		this.armorChestplateCanvas = document.createElement("canvas");
+		this.armorLeggingsCanvas = document.createElement("canvas");
+		this.armorBootsCanvas = document.createElement("canvas");
 		this.capeCanvas = document.createElement("canvas");
 		this.earsCanvas = document.createElement("canvas");
 
@@ -390,6 +437,7 @@ export class SkinViewer {
 		this.playerObject.name = "player";
 		this.playerObject.skin.visible = false;
 		this.playerObject.cape.visible = false;
+		this.playerObject.armors.visible = false;
 		this.playerWrapper = new Group();
 		this.playerWrapper.add(this.playerObject);
 		this.scene.add(this.playerWrapper);
@@ -408,6 +456,13 @@ export class SkinViewer {
 				model: options.model,
 				ears: options.ears === "current-skin",
 			});
+		}
+		if (options.armors !== undefined) {
+			if (Array.isArray(options.armors)) {
+				this.loadArmors(...(options.armors as (RemoteImage | TextureSource | null)[]));
+			} else {
+				this.loadArmors(options.armors);
+			}
 		}
 		if (options.cape !== undefined) {
 			this.loadCape(options.cape);
@@ -505,6 +560,34 @@ export class SkinViewer {
 		this.fxaaPass.material.uniforms["resolution"].value.y = 1 / (this.height * pixelRatio);
 	}
 
+	private recreateArmorTexture(): void {
+		[this.armorHelmetTexture, this.armorChestplateTexture, this.armorLeggingsTexture, this.armorBootsTexture].forEach(
+			texture => {
+				if (texture !== null) {
+					texture.dispose();
+				}
+			}
+		);
+		this.armorHelmetTexture = new CanvasTexture(this.armorHelmetCanvas);
+		this.armorHelmetTexture.magFilter = NearestFilter;
+		this.armorHelmetTexture.minFilter = NearestFilter;
+		this.armorChestplateTexture = new CanvasTexture(this.armorChestplateCanvas);
+		this.armorChestplateTexture.magFilter = NearestFilter;
+		this.armorChestplateTexture.minFilter = NearestFilter;
+		this.armorLeggingsTexture = new CanvasTexture(this.armorLeggingsCanvas);
+		this.armorLeggingsTexture.magFilter = NearestFilter;
+		this.armorLeggingsTexture.minFilter = NearestFilter;
+		this.armorBootsTexture = new CanvasTexture(this.armorBootsCanvas);
+		this.armorBootsTexture.magFilter = NearestFilter;
+		this.armorBootsTexture.minFilter = NearestFilter;
+		this.playerObject.armors.setArmorMaps(
+			this.armorHelmetTexture,
+			this.armorChestplateTexture,
+			this.armorLeggingsTexture,
+			this.armorBootsTexture
+		);
+	}
+
 	private recreateSkinTexture(): void {
 		if (this.skinTexture !== null) {
 			this.skinTexture.dispose();
@@ -535,6 +618,169 @@ export class SkinViewer {
 		this.earsTexture.minFilter = NearestFilter;
 		this.playerObject.ears.map = this.earsTexture;
 	}
+	loadArmors(empty: null): void | Promise<void>;
+	loadArmors(single: TextureSource | RemoteImage): void | Promise<void>;
+	loadArmors(main: TextureSource | RemoteImage, legs: TextureSource | RemoteImage): void | Promise<void>;
+	loadArmors(
+		helmetTexture: TextureSource | RemoteImage,
+		chestplateTexture: TextureSource | RemoteImage,
+		leggingsTexture: TextureSource | RemoteImage,
+		bootsTexture: TextureSource | RemoteImage
+	): void | Promise<void>;
+	loadArmors(...textures: (RemoteImage | TextureSource | null)[]): void | Promise<void>;
+	loadArmors(...textures: (TextureSource | RemoteImage | null)[]) {
+		if (textures.length === 0 || (textures.length === 1 && textures[0] === null)) {
+			this.resetArmors();
+			return;
+		}
+
+		let texturesCopy: (TextureSource | RemoteImage | null)[] = [...textures];
+
+		const syncImages: (TextureSource | null)[] = texturesCopy.map(() => null);
+		const asyncPromises: Promise<void>[] = [];
+
+		texturesCopy.forEach((src, index) => {
+			if (src === null) {
+				syncImages[index] = null;
+			} else if (isTextureSource(src)) {
+				syncImages[index] = src;
+			} else {
+				asyncPromises.push(
+					loadImage(src).then(img => {
+						syncImages[index] = img;
+					})
+				);
+			}
+		});
+
+		if (asyncPromises.length > 0) {
+			return Promise.all(asyncPromises).then(() => {
+				this._applyArmorTextures(syncImages);
+			});
+		} else {
+			this._applyArmorTextures(syncImages);
+		}
+	}
+
+	private inferArmorType(texture: TextureSource): "legs" | "main" {
+		const canvas = document.createElement("canvas");
+		canvas.width = texture.width;
+		canvas.height = texture.height;
+		const ctx = canvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D;
+		ctx.drawImage(texture, 0, 0, texture.width, texture.height);
+
+		const scale = canvas.width / 64;
+		const x = 0;
+		const y = 0;
+		const w = Math.floor(32 * scale);
+		const h = Math.floor(16 * scale);
+
+		const imgData = ctx.getImageData(x, y, w, h);
+		const data = imgData.data;
+		const pixelCount = w * h;
+
+		let allTransparent = true;
+		let allBlack = true;
+		let allWhite = true;
+
+		for (let i = 0; i < pixelCount; i++) {
+			const offset = i * 4;
+			const r = data[offset];
+			const g = data[offset + 1];
+			const b = data[offset + 2];
+			const a = data[offset + 3];
+
+			if (a !== 0) allTransparent = false;
+			if (!(r === 0 && g === 0 && b === 0 && a === 255)) allBlack = false;
+			if (!(r === 255 && g === 255 && b === 255 && a === 255)) allWhite = false;
+
+			if (!allTransparent && !allBlack && !allWhite) {
+				return "main";
+			}
+		}
+
+		return allTransparent || allBlack || allWhite ? "legs" : "main";
+	}
+
+	private _applyArmorTextures(textures: (TextureSource | null)[]): void {
+		if (textures.length === 1) {
+			if (textures[0] && this.inferArmorType(textures[0]) === "main") {
+				textures = [textures[0], textures[0], null, textures[0]];
+			} else {
+				textures = [null, null, textures[0], null];
+			}
+		} else if (textures.length === 2) {
+			if (textures[0] == null || textures[1] == null) {
+				const notNullTexture = textures[0] || textures[1];
+				if (notNullTexture && this.inferArmorType(notNullTexture) === "main") {
+					textures = [textures[0] || textures[1], textures[0] || textures[1], null, textures[0] || textures[1]];
+				} else {
+					textures = [null, null, textures[0] || textures[1], null];
+				}
+			} else if (this.inferArmorType(textures[0]) === "main") {
+				if (textures[1] && this.inferArmorType(textures[1]) != "legs") {
+					console.warn("Two 'main' textures are provided.");
+				}
+				textures = [textures[0], textures[0], textures[1], textures[0]];
+			} else {
+				if (textures[1] && this.inferArmorType(textures[1]) != "main") {
+					console.warn("Two 'leg' textures are provided.");
+				}
+				textures = [textures[1], textures[1], textures[0], textures[1]];
+			}
+		} else if (textures.length != 4) {
+			const len = textures.length;
+			const expected = "Expected 0 arguments, 1 argument , 2 arguments, or 4 arguments.";
+			const received = `Received ${len} argument${len !== 1 ? "s" : ""}.`;
+			throw new Error(`Invalid arguments. ${expected} ${received}`);
+		}
+
+		const [helmet, chestplate, leggings, boots] = textures;
+		if (this.contexts.length === 0) {
+			this.contexts = [
+				this.armorHelmetCanvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D,
+				this.armorChestplateCanvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D,
+				this.armorLeggingsCanvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D,
+				this.armorBootsCanvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D,
+			];
+		}
+
+		[this.armorHelmetCanvas, this.armorChestplateCanvas, this.armorLeggingsCanvas, this.armorBootsCanvas].forEach(
+			(canvas, index) => {
+				if (textures[index]) {
+					// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+					let textureType = this.inferArmorType(textures[index]!);
+					if ((textureType === "main" && index === 2) || (textureType === "legs" && index != 2)) {
+						console.warn(`Wrong texture is provided.  Index ${index}`);
+					}
+					// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+					const sideLength = textures[index]!.width;
+					canvas.width = sideLength;
+					canvas.height = sideLength;
+				}
+				(canvas.getContext("2d") as CanvasRenderingContext2D).clearRect(0, 0, canvas.width, canvas.height);
+			}
+		);
+
+		if (helmet) this.contexts[0].drawImage(helmet as CanvasImageSource, 0, 0, helmet.width, helmet.width / 2);
+		if (chestplate)
+			this.contexts[1].drawImage(chestplate as CanvasImageSource, 0, 0, chestplate.width, chestplate.width / 2);
+		if (leggings) this.contexts[2].drawImage(leggings as CanvasImageSource, 0, 0, leggings.width, leggings.width / 2);
+		if (boots) this.contexts[3].drawImage(boots as CanvasImageSource, 0, 0, boots.width, boots.width / 2);
+
+		this.recreateArmorTexture();
+		this.playerObject.armors.visible = true;
+		this.playerObject.armors.headArmor && (this.playerObject.armors.headArmor.visible = !!helmet);
+		this.playerObject.armors.bodyArmor && (this.playerObject.armors.bodyArmor.visible = !!chestplate || !!leggings);
+		this.playerObject.armors.leftArmArmor && (this.playerObject.armors.leftArmArmor.visible = !!chestplate);
+		this.playerObject.armors.rightArmArmor && (this.playerObject.armors.rightArmArmor.visible = !!chestplate);
+		this.playerObject.armors.leftLegArmor && (this.playerObject.armors.leftLegArmor.visible = !!leggings || !!boots);
+		this.playerObject.armors.rightLegArmor && (this.playerObject.armors.rightLegArmor.visible = !!leggings || !!boots);
+		this.playerObject.armors.bodyArmor2 && (this.playerObject.armors.bodyArmor2.visible = !!chestplate || !!leggings);
+		this.playerObject.armors.leftLegArmor2 && (this.playerObject.armors.leftLegArmor2.visible = !!leggings || !!boots);
+		this.playerObject.armors.rightLegArmor2 &&
+			(this.playerObject.armors.rightLegArmor2.visible = !!leggings || !!boots);
+	}
 
 	loadSkin(empty: null): void;
 	loadSkin<S extends TextureSource | RemoteImage>(
@@ -554,7 +800,13 @@ export class SkinViewer {
 			} else {
 				this.playerObject.skin.modelType = options.model;
 			}
-
+			if (options.armors !== undefined) {
+				if (Array.isArray(options.armors)) {
+					this.loadArmors(...options.armors);
+				} else {
+					this.loadArmors(options.armors);
+				}
+			}
 			if (options.makeVisible !== false) {
 				this.playerObject.skin.visible = true;
 			}
@@ -574,10 +826,48 @@ export class SkinViewer {
 			return loadImage(source).then(image => this.loadSkin(image, options));
 		}
 	}
-
+	resetArmors(): void {
+		this.playerObject.armors.visible = false;
+		this.playerObject.armors.headArmor && (this.playerObject.armors.headArmor.visible = false);
+		this.playerObject.armors.bodyArmor && (this.playerObject.armors.bodyArmor.visible = false);
+		this.playerObject.armors.leftArmArmor && (this.playerObject.armors.leftArmArmor.visible = false);
+		this.playerObject.armors.rightArmArmor && (this.playerObject.armors.rightArmArmor.visible = false);
+		this.playerObject.armors.leftLegArmor && (this.playerObject.armors.leftLegArmor.visible = false);
+		this.playerObject.armors.rightLegArmor && (this.playerObject.armors.rightLegArmor.visible = false);
+		this.playerObject.armors.bodyArmor2 && (this.playerObject.armors.bodyArmor2.visible = false);
+		this.playerObject.armors.leftLegArmor2 && (this.playerObject.armors.leftLegArmor2.visible = false);
+		this.playerObject.armors.rightLegArmor2 && (this.playerObject.armors.rightLegArmor2.visible = false);
+		this.playerObject.armors.headArmor &&
+			((this.playerObject.armors.headArmor.material as MeshStandardMaterial).map = null);
+		this.playerObject.armors.bodyArmor &&
+			((this.playerObject.armors.bodyArmor.material as MeshStandardMaterial).map = null);
+		this.playerObject.armors.leftArmArmor &&
+			((this.playerObject.armors.leftArmArmor.material as MeshStandardMaterial).map = null);
+		this.playerObject.armors.rightArmArmor &&
+			((this.playerObject.armors.rightArmArmor.material as MeshStandardMaterial).map = null);
+		this.playerObject.armors.leftLegArmor &&
+			((this.playerObject.armors.leftLegArmor.material as MeshStandardMaterial).map = null);
+		this.playerObject.armors.rightLegArmor &&
+			((this.playerObject.armors.rightLegArmor.material as MeshStandardMaterial).map = null);
+		this.playerObject.armors.bodyArmor2 &&
+			((this.playerObject.armors.bodyArmor2.material as MeshStandardMaterial).map = null);
+		this.playerObject.armors.leftLegArmor2 &&
+			((this.playerObject.armors.leftLegArmor2.material as MeshStandardMaterial).map = null);
+		this.playerObject.armors.rightLegArmor2 &&
+			((this.playerObject.armors.rightLegArmor2.material as MeshStandardMaterial).map = null);
+		[this.armorHelmetTexture, this.armorChestplateTexture, this.armorLeggingsTexture, this.armorBootsTexture].forEach(
+			texture => {
+				if (texture !== null) {
+					texture.dispose();
+					texture = null;
+				}
+			}
+		);
+	}
 	resetSkin(): void {
 		this.playerObject.skin.visible = false;
 		this.playerObject.skin.map = null;
+		this.resetArmors();
 		if (this.skinTexture !== null) {
 			this.skinTexture.dispose();
 			this.skinTexture = null;
