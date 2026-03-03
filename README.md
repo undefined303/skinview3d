@@ -123,7 +123,9 @@ You can load armors using the `loadArmors` method. It accepts different numbers 
 - **`loadArmors(source)`** – A single armor material.  
   - If the material is detected as `main`, it will be applied to helmet, chestplate, and boots.  
   - If it is detected as `legs`, it will be applied only to leggings.
-- **`loadArmors(main, legs)`** – Two materials. The first should be a `main` texture (for helmet, chestplate, boots) and the second a `legs` texture (for leggings).
+- **`loadArmors(textureA, textureB)`** – Two materials. Their types are automatically detected:
+  - If both are provided, the material detected as `main` will be used for helmet, chestplate, and boots, and the material detected as `legs` will be used for leggings.  
+  - If one of them is `null`, the non‑null material is treated as a single material and applied according to its type.
 - **`loadArmors(helmet, chestplate, leggings, boots)`** – Four materials applied in the exact order: helmet, chestplate, leggings, boots. The third (leggings) must be a `legs` texture; the others must be `main` textures.
 
 All parameters can be a `RemoteImage` (URL string), a `TextureSource` (HTML image element or canvas), or `null` to leave that slot empty.
