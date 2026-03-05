@@ -79,12 +79,15 @@ export interface SkinLoadOptions extends LoadOptions {
 	 * The armor textures to load along with the skin.
 	 *
 	 * This option behaves exactly the same as the `armors` option in {@link SkinViewerOptions}.
-	 * You can specify a single armor material, `null` (to hide all armor), or an array of armor materials.
-	 * The array length must be 1, 2, or 4, with the same semantics as described in {@link SkinViewerOptions}.
+	 * You can specify an object containing textures for specific armor pieces.
+	 * The object may include any of the following optional properties:
+	 * - `helmet`, `chestplate`, `leggings`, `boots`: direct textures for each piece.
+	 * - `main`: a texture that will be used for helmet, chestplate, and boots if their specific textures are not provided.
+	 * - `legs`: a texture that will be used for leggings if not provided.
 	 *
-	 * If unspecified, the armor will not be changed (i.e., remains as previously set).
+	 * If the option is omitted, all armors will be removed.
 	 */
-	armors?: RemoteImage | TextureSource | null | Array<RemoteImage | TextureSource | null>;
+	armors?: ArmorTexture;
 }
 
 export interface CapeLoadOptions extends LoadOptions {
@@ -109,7 +112,20 @@ export interface EarsLoadOptions extends LoadOptions {
 	 */
 	textureType?: "standalone" | "skin";
 }
-
+type ArmorTexture = Partial<{
+	helmet: TextureSource | RemoteImage | null;
+	chestplate: TextureSource | RemoteImage | null;
+	leggings: TextureSource | RemoteImage | null;
+	boots: TextureSource | RemoteImage | null;
+	main: TextureSource | RemoteImage | null;
+	legs: TextureSource | RemoteImage | null;
+}>;
+type NormalizedArmor = {
+	helmet: TextureSource | RemoteImage | null;
+	chestplate: TextureSource | RemoteImage | null;
+	leggings: TextureSource | RemoteImage | null;
+	boots: TextureSource | RemoteImage | null;
+};
 export interface SkinViewerOptions {
 	/**
 	 * The canvas where the renderer draws its output.
@@ -184,23 +200,21 @@ export interface SkinViewerOptions {
 	/**
 	 * The armor textures of the player.
 	 *
-	 * You can specify a single armor material or an array of armor materials.
-	 * An armor material can be a `RemoteImage`, a `TextureSource`, or `null` (to hide that piece).
+	 * You can specify an object containing textures for different armor pieces.
+	 * The object may include any of the following optional properties:
+	 * - `helmet`, `chestplate`, `leggings`, `boots`: textures for individual pieces.
+	 * - `main`: a texture that will be applied to helmet, chestplate, and boots when their specific properties are absent.
+	 * - `legs`: a texture that will be applied to leggings when `leggings` is absent.
 	 *
-	 * When a single material is provided, its type (`"main"` for helmet, chestplate, boots; or `"legs"` for leggings)
-	 * will be automatically detected and applied to the corresponding armor pieces.
+	 * Each texture can be a `RemoteImage` (URL string), a `TextureSource` (HTML image element), or `null` to hide that piece.
 	 *
-	 * When an array is provided, its length must be 1, 2, or 4:
-	 *   - **Length 1**: Treated the same as providing a single material (auto‑detect type).
-	 *   - **Length 2**: Automatically detects the two materials' types (expected one `"main"` and one `"legs"`) and applies them.
-	 *   - **Length 4**: Materials are applied in order: `[helmet, chestplate, leggings, boots]`.
-	 *     Any element can be `null` to leave that slot empty.
+	 * If a property is omitted, it defaults to `null` (no texture for that piece), but may be overridden by `main` or `legs` as described above.
 	 *
-	 * If the option is omitted, set to `null`, or an empty array, no armor will be visible.
+	 * If the option is omitted, set to `null`, or an empty object, all armors will be removed.
 	 *
 	 * @defaultValue `undefined` (no armor)
 	 */
-	armors?: RemoteImage | TextureSource | null | Array<RemoteImage | TextureSource | null>;
+	armors?: ArmorTexture;
 
 	/**
 	 * Whether to preserve the buffers until manually cleared or overwritten.
@@ -458,11 +472,7 @@ export class SkinViewer {
 			});
 		}
 		if (options.armors !== undefined) {
-			if (Array.isArray(options.armors)) {
-				this.loadArmors(...(options.armors as (RemoteImage | TextureSource | null)[]));
-			} else {
-				this.loadArmors(options.armors);
-			}
+			this.loadArmors(options.armors);
 		}
 		if (options.cape !== undefined) {
 			this.loadCape(options.cape);
@@ -619,35 +629,31 @@ export class SkinViewer {
 		this.playerObject.ears.map = this.earsTexture;
 	}
 	loadArmors(empty: null): void | Promise<void>;
-	loadArmors(single: TextureSource | RemoteImage): void | Promise<void>;
-	loadArmors(main: TextureSource | RemoteImage, legs: TextureSource | RemoteImage): void | Promise<void>;
-	loadArmors(
-		helmetTexture: TextureSource | RemoteImage,
-		chestplateTexture: TextureSource | RemoteImage,
-		leggingsTexture: TextureSource | RemoteImage,
-		bootsTexture: TextureSource | RemoteImage
-	): void | Promise<void>;
-	loadArmors(...textures: (RemoteImage | TextureSource | null)[]): void | Promise<void>;
-	loadArmors(...textures: (TextureSource | RemoteImage | null)[]) {
-		if (textures.length === 0 || (textures.length === 1 && textures[0] === null)) {
+	loadArmors(textures: ArmorTexture | null): void | Promise<void>;
+	loadArmors(textures: ArmorTexture | null) {
+		if (!textures) {
 			this.resetArmors();
 			return;
 		}
 
-		let texturesCopy: (TextureSource | RemoteImage | null)[] = [...textures];
-
-		const syncImages: (TextureSource | null)[] = texturesCopy.map(() => null);
+		let texturesCopy: NormalizedArmor = {
+			helmet: textures.helmet ?? textures.main ?? null,
+			chestplate: textures.chestplate ?? textures.main ?? null,
+			leggings: textures.leggings ?? textures.legs ?? null,
+			boots: textures.boots ?? textures.main ?? null,
+		};
+		const syncImages: ArmorTexture = {};
 		const asyncPromises: Promise<void>[] = [];
 
-		texturesCopy.forEach((src, index) => {
-			if (src === null) {
-				syncImages[index] = null;
-			} else if (isTextureSource(src)) {
-				syncImages[index] = src;
+		(Object.keys(texturesCopy) as Array<keyof NormalizedArmor>).forEach(key => {
+			if (texturesCopy[key] === null) {
+				syncImages[key] = null;
+			} else if (isTextureSource(texturesCopy[key])) {
+				syncImages[key] = texturesCopy[key] as TextureSource;
 			} else {
 				asyncPromises.push(
-					loadImage(src).then(img => {
-						syncImages[index] = img;
+					loadImage(texturesCopy[key] as RemoteImage).then(img => {
+						syncImages[key] = img;
 					})
 				);
 			}
@@ -655,10 +661,10 @@ export class SkinViewer {
 
 		if (asyncPromises.length > 0) {
 			return Promise.all(asyncPromises).then(() => {
-				this._applyArmorTextures(syncImages);
+				this._applyArmorTextures(syncImages as NormalizedArmor);
 			});
 		} else {
-			this._applyArmorTextures(syncImages);
+			this._applyArmorTextures(syncImages as NormalizedArmor);
 		}
 	}
 
@@ -702,40 +708,28 @@ export class SkinViewer {
 		return allTransparent || allBlack || allWhite ? "legs" : "main";
 	}
 
-	private _applyArmorTextures(textures: (TextureSource | null)[]): void {
-		if (textures.length === 1) {
-			if (textures[0] && this.inferArmorType(textures[0]) === "main") {
-				textures = [textures[0], textures[0], null, textures[0]];
-			} else {
-				textures = [null, null, textures[0], null];
-			}
-		} else if (textures.length === 2) {
-			if (textures[0] == null || textures[1] == null) {
-				const notNullTexture = textures[0] || textures[1];
-				if (notNullTexture && this.inferArmorType(notNullTexture) === "main") {
-					textures = [textures[0] || textures[1], textures[0] || textures[1], null, textures[0] || textures[1]];
-				} else {
-					textures = [null, null, textures[0] || textures[1], null];
-				}
-			} else if (this.inferArmorType(textures[0]) === "main") {
-				if (textures[1] && this.inferArmorType(textures[1]) != "legs") {
-					console.warn("Two 'main' textures are provided.");
-				}
-				textures = [textures[0], textures[0], textures[1], textures[0]];
-			} else {
-				if (textures[1] && this.inferArmorType(textures[1]) != "main") {
-					console.warn("Two 'leg' textures are provided.");
-				}
-				textures = [textures[1], textures[1], textures[0], textures[1]];
-			}
-		} else if (textures.length != 4) {
-			const len = textures.length;
-			const expected = "Expected 0 arguments, 1 argument , 2 arguments, or 4 arguments.";
-			const received = `Received ${len} argument${len !== 1 ? "s" : ""}.`;
-			throw new Error(`Invalid arguments. ${expected} ${received}`);
-		}
+	private _applyArmorTextures(textures: NormalizedArmor): void {
+		const helmet = textures.helmet as TextureSource;
+		const chestplate = textures.chestplate as TextureSource;
+		const leggings = textures.leggings as TextureSource;
+		const boots = textures.boots as TextureSource;
+		const inferArmorType = this.inferArmorType;
+		const armorTypeMap: Record<keyof NormalizedArmor, "main" | "legs"> = {
+			helmet: "main",
+			chestplate: "main",
+			leggings: "legs",
+			boots: "main",
+		};
 
-		const [helmet, chestplate, leggings, boots] = textures;
+		const armorNames = ["helmet", "chestplate", "leggings", "boots"];
+		function setInvalidTextureWarn(type: keyof NormalizedArmor) {
+			if (textures[type] && inferArmorType(textures[type] as TextureSource) != armorTypeMap[type]) {
+				console.warn(`Invalid texture , from ${type}`);
+			}
+		}
+		armorNames.forEach(key => {
+			setInvalidTextureWarn(key as keyof NormalizedArmor);
+		});
 		if (this.contexts.length === 0) {
 			this.contexts = [
 				this.armorHelmetCanvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D,
@@ -747,14 +741,8 @@ export class SkinViewer {
 
 		[this.armorHelmetCanvas, this.armorChestplateCanvas, this.armorLeggingsCanvas, this.armorBootsCanvas].forEach(
 			(canvas, index) => {
-				if (textures[index]) {
-					// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-					let textureType = this.inferArmorType(textures[index]!);
-					if ((textureType === "main" && index === 2) || (textureType === "legs" && index != 2)) {
-						console.warn(`Wrong texture is provided.  Index ${index}`);
-					}
-					// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-					const sideLength = textures[index]!.width;
+				if (textures[armorNames[index] as keyof NormalizedArmor]) {
+					const sideLength = (textures[armorNames[index] as keyof NormalizedArmor] as TextureSource).width;
 					canvas.width = sideLength;
 					canvas.height = sideLength;
 				}
@@ -801,11 +789,7 @@ export class SkinViewer {
 				this.playerObject.skin.modelType = options.model;
 			}
 			if (options.armors !== undefined) {
-				if (Array.isArray(options.armors)) {
-					this.loadArmors(...options.armors);
-				} else {
-					this.loadArmors(options.armors);
-				}
+				this.loadArmors(options.armors);
 			}
 			if (options.makeVisible !== false) {
 				this.playerObject.skin.visible = true;
