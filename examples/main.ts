@@ -92,16 +92,21 @@ function reloadArmors(): void {
 	const url3 = obtainTextureUrl("leggings_url");
 	const input4 = document.getElementById("boots_url") as HTMLInputElement;
 	const url4 = obtainTextureUrl("boots_url");
-	const textures = [url1, url2, url3, url4];
+	const textures = {
+		helmet: url1,
+		chestplate: url2,
+		leggings: url3,
+		boots: url4,
+	};
 	const inputs = [input1.input2, input3, input4];
-	textures.forEach((url, index) => {
-		if (url === "") {
+	Object.keys(textures).forEach((key, index) => {
+		if (textures[key] === "") {
 			inputs[index]?.setCustomValidity("");
-			textures[index] = null;
+			textures[key] = null;
 		}
 	});
 	skinViewer
-		.loadArmors(...textures)
+		.loadArmors(textures)
 		?.then(() => {
 			inputs.forEach(input => {
 				input?.setCustomValidity("");
