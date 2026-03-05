@@ -104,71 +104,68 @@ skinViewer.globalLight.intensity = 3;
 Setting `globalLight.intensity` to `3.0` and `cameraLight.intensity` to `0.0`
 will completely disable shadows.
 
+
 ## Armors
 
-skinview3d supports loading armor textures for the player. There are two types of armor materials:
+skinview3d supports loading armor textures for the player. Armor textures can be specified as an object with the following optional properties:
 
-- **`main`**: Used for helmet, chestplate, and boots.
-- **`legs`**: Used for leggings.
+- `helmet`, `chestplate`, `leggings`, `boots`: textures for the corresponding pieces.
+- `main`: a texture that will be used for helmet, chestplate, and boots if their specific textures are not provided.
+- `legs`: a texture that will be used for leggings if `leggings` is not provided.
 
-The type of an armor texture is automatically detected by analyzing the top‑left area of the image.  
-If the texture has colored pixels there, it is considered `main`; if it is fully transparent, black, or white, it is considered `legs`.
+Each texture can be a `RemoteImage` (URL string), a `TextureSource` (HTML image element or canvas), or `null` to hide that piece.
 
 ### Loading Armors
 
-You can load armors using the `loadArmors` method. It accepts different numbers of arguments:
-
-- **`loadArmors(null)`** – Hides all armor pieces.
-- **`loadArmors()`** (no arguments) – Also hides all armor (same as passing `null`).
-- **`loadArmors(source)`** – A single armor material.  
-  - If the material is detected as `main`, it will be applied to helmet, chestplate, and boots.  
-  - If it is detected as `legs`, it will be applied only to leggings.
-- **`loadArmors(textureA, textureB)`** – Two materials. Their types are automatically detected:
-  - If both are provided, the material detected as `main` will be used for helmet, chestplate, and boots, and the material detected as `legs` will be used for leggings.  
-  - If one of them is `null`, the non‑null material is treated as a single material and applied according to its type.
-- **`loadArmors(helmet, chestplate, leggings, boots)`** – Four materials applied in the exact order: helmet, chestplate, leggings, boots. The third (leggings) must be a `legs` texture; the others must be `main` textures.
-
-All parameters can be a `RemoteImage` (URL string), a `TextureSource` (HTML image element or canvas), or `null` to leave that slot empty.
+You can load armors using the `loadArmors` method. It accepts an object conforming to the structure above, or `null` to hide all armor.
 
 Examples:
 
 ```js
-// Clear armors
+// Hide all armor
 skinViewer.loadArmors(null);
-skinViewer.loadArmors(); // same effect
 
-// Single main material – equips helmet, chestplate, boots
-skinViewer.loadArmors("img/diamond_layer_1.png");
+// Equip only helmet, chestplate, and boots using the same "main" texture
+skinViewer.loadArmors({ main: "img/diamond_layer_1.png" });
 
-// Single legs material – equips leggings only
-skinViewer.loadArmors("img/diamond_layer_2.png");
+// Equip only leggings using a "legs" texture
+skinViewer.loadArmors({ legs: "img/diamond_layer_2.png" });
 
-// Two materials: main and legs
-skinViewer.loadArmors("img/diamond_layer_1.png", "img/diamond_layer_2.png");
+// Equip both main and legs textures
+skinViewer.loadArmors({
+  main: "img/diamond_layer_1.png",
+  legs: "img/diamond_layer_2.png"
+});
 
-// Four materials: helmet, chestplate, leggings, boots
-skinViewer.loadArmors(
-  "img/turtle_layer_1.png",   // helmet (main)
-  "img/diamond_layer_1.png",  // chestplate (main)
-  "img/gold_layer_2.png",     // leggings (legs)
-  "img/iron_layer_1.png"      // boots (main)
-);
+// Equip all four pieces individually (helmet, chestplate, leggings, boots)
+skinViewer.loadArmors({
+  helmet: "img/turtle_layer_1.png",
+  chestplate: "img/diamond_layer_1.png",
+  leggings: "img/gold_layer_2.png",
+  boots: "img/iron_layer_1.png"
+});
+
+// Mix specific pieces with fallback textures
+skinViewer.loadArmors({
+  helmet: "img/turtle_layer_1.png",
+  main: "img/diamond_layer_1.png", // used for chestplate and boots
+  leggings: "img/gold_layer_2.png"
+});
 ```
 
 ### Using Armors in the Constructor
 
-You can specify armors directly in the `SkinViewer` options via the `armors` property.  
-It accepts the same values as the `loadArmors` method: a single material, `null`, or an array of materials.
+You can specify armors directly in the `SkinViewer` options via the `armors` property. It accepts the same object format as `loadArmors`.
 
 ```js
 new skinview3d.SkinViewer({
   skin: "img/skin.png",
-  armors: [
-    "img/turtle_layer_1.png",   // helmet
-    "img/diamond_layer_1.png",  // chestplate
-    "img/gold_layer_2.png",     // leggings
-    "img/iron_layer_1.png"      // boots
-  ]
+  armors: {
+    helmet: "img/turtle_layer_1.png",
+    chestplate: "img/diamond_layer_1.png",
+    leggings: "img/gold_layer_2.png",
+    boots: "img/iron_layer_1.png"
+  }
 });
 ```
 
@@ -178,12 +175,10 @@ The `loadSkin` method also accepts an `armors` option, which behaves identically
 
 ```js
 skinViewer.loadSkin("img/skin.png", {
-  armors: [
-    "img/turtle_layer_1.png",
-    "img/diamond_layer_1.png",
-    "img/gold_layer_2.png",
-    "img/iron_layer_1.png"
-  ]
+  armors: {
+    main: "img/diamond_layer_1.png",
+    legs: "img/diamond_layer_2.png"
+  }
 });
 ```
 
